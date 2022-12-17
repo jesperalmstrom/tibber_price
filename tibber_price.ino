@@ -1,16 +1,12 @@
 #include <WiFi.h>
 #include <ArduinoJson.h>  // add this library to your project
+#include <GxEPD2_BW.h>
 
-// Replace these with your own WiFi and Tibber API credentials
-const char *ssid = "YOUR_WIFI_SSID";
-const char *password = "YOUR_WIFI_PASSWORD";
+#include "wifi_epaper_settings.h"
+
+#define ENABLE_GxEPD2_GFX 0
+
 IPAddress server(52, 214, 65, 66);  // api.tibber.com
-
-// GraphQL query to get the current price
-const char *query = "{viewer {homes {currentSubscription {priceInfo {current {total }}}}}}";
-
-// API token for Tibber demo
-const char *token = "5K4MVS-OjfWhK_4yrjOlFe1F6kJXPVf7eQYggo8ebAE";
 
 // Buffer to store the HTTP request
 char request[1000];
@@ -22,7 +18,7 @@ WiFiClient client;
 
 void setup() {
   // Initialize serial and WiFi
-  Serial.begin(9600);
+  Serial.begin(115200);
   WiFi.begin(ssid, password);
 
   // Wait for WiFi connection
@@ -68,7 +64,7 @@ void loop() {
   StaticJsonDocument<200> doc;
   DeserializationError error = deserializeJson(doc, response);
   if (error) {
-    Serial.println
+    Serial.println();
     Serial.println("Error parsing JSON response");
     return;
   }
@@ -81,7 +77,7 @@ void loop() {
 
   // Disconnect from the server
   client.stop();
-
+  int oneHourInMilliSeconds = 60*60*1000;
   // Wait a while before making another request
-  delay(10000);
+  delay(oneHourInMilliSeconds);
 }
