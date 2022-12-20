@@ -1,12 +1,13 @@
 #include <WiFi.h>
+#include <HTTPClient.h>
 #include <ArduinoJson.h>  // add this library to your project
 #include <GxEPD2_BW.h>
+#include <Fonts/FreeMonoBold12pt7b.h>
+#include "time.h"
 
 #include "wifi_epaper_settings.h"
 
 #define ENABLE_GxEPD2_GFX 0
-
-IPAddress server(52, 214, 65, 66);  // api.tibber.com
 
 // Buffer to store the HTTP request
 char request[1000];
@@ -14,7 +15,9 @@ char request[1000];
 // Buffer to store the HTTP response
 char response[1000];
 
-WiFiClient client;
+WiFiClientSecure client;
+const String tibberApi = "https://api.tibber.com/v1-beta/gql";
+const String payload = "{\"query\": \"{viewer {homes {currentSubscription {priceInfo {current {total}}}}}}\" }";
 
 void setup() {
   // Initialize serial and WiFi
@@ -29,36 +32,48 @@ void setup() {
   }
   Serial.println();
   Serial.println("Connected to WiFi!");
+  client.setCACert(root_ca);
+  Serial.println("setup display");
+  delay(100);
+  display.init();
 
-  // Connect to the Tibber API server
-  Serial.println("Connecting to Tibber API server...");
-  if (client.connect(server, 443)) {
-    Serial.println("Connected to server!");
-  } else {
-    Serial.println("Connection failed.");
-  }
+  // Init and get the time
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  printLocalTime();
+
 }
 
 void loop() {
-  // Build the HTTP POST request
-  sprintf(request, "POST /v1-beta/gql HTTP/1.1\r\n"
-                  "Host: api.tibber.com\r\n"
-                  "Content-Type: application/json\r\n"
-                  "Content-Length: %d\r\n"
-                  "Connection: close\r\n"
-                  "Authorization: Bearer %s\r\n"  // add the API token to the headers
-                  "\r\n"
-                  "{\"query\":\"%s\"}", strlen(query), token, query);
+  HTTPClient http;
+  String b = "Bearer ";
 
-  // Send the request to the server
-  client.print(request);
+  printLocalTime();
 
-  // Read the response from the server
-  int responseLength = 0;
-  while (client.available()) {
-    char c = client.read();
-    response[responseLength++] = c;
+  http.begin(client, tibberApi); 
+  // add necessary headers
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Authorization",  b+token);
+  int httpCode = http.POST(payload);
+  if (httpCode == HTTP_CODE_OK) {
+    String response = http.getString();
+    //Serial.println(response);
+    double totalCostPerkwh = parseResponse(response);
+    showCost(totalCostPerkwh);
+  } else {
+    Serial.println("something went wrong");
+    Serial.println(httpCode);
   }
+  http.end();
+
+  // Disconnect from the server
+  client.stop();
+
+  int oneHourInMilliSeconds = 60*60*1000;
+  // Wait a while before making another request
+  delay(oneHourInMilliSeconds);
+}
+
+double parseResponse(String response) {
 
   // Parse the JSON response
   StaticJsonDocument<200> doc;
@@ -66,7 +81,7 @@ void loop() {
   if (error) {
     Serial.println();
     Serial.println("Error parsing JSON response");
-    return;
+    return 0;
   }
 
   // Get the "total" value from the response
@@ -74,10 +89,65 @@ void loop() {
 
   // Print the total to the serial console
   Serial.println(total);
+  return total;
+}
 
-  // Disconnect from the server
-  client.stop();
-  int oneHourInMilliSeconds = 60*60*1000;
-  // Wait a while before making another request
-  delay(oneHourInMilliSeconds);
+void showCost(double dCost) {
+  Serial.println("showCost");
+  display.setRotation(1);
+  display.setFont(&FreeMonoBold12pt7b);
+  if (display.epd2.WIDTH < 104) display.setFont(0);
+  display.setTextColor(GxEPD_BLACK);
+  int16_t tbx, tby; uint16_t tbw, tbh;
+  String sCost = "Elpris ";
+  String dispText = sCost+dCost;
+  display.getTextBounds(dispText, 0, 0, &tbx, &tby, &tbw, &tbh);
+  // center bounding box by transposition of origin:
+  uint16_t x = ((display.width() - tbw) / 2) - tbx;
+  uint16_t y = ((display.height() - tbh) / 2) - tby;
+  display.setFullWindow();
+  display.firstPage();
+  do
+  {
+    display.fillScreen(GxEPD_WHITE);
+    display.setCursor(x, y);
+    display.print(dispText);
+  }
+  while (display.nextPage());
+  Serial.println("showCost done");
+}
+
+void printLocalTime(){
+  struct tm timeinfo;
+  if(!getLocalTime(&timeinfo)){
+    Serial.println("Failed to obtain time");
+    return;
+  }
+  Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+  Serial.println(&timeinfo, "%Y-%m-%d %H:%M:%S");
+  Serial.print("Day of week: ");
+  Serial.println(&timeinfo, "%A");
+  Serial.print("Month: ");
+  Serial.println(&timeinfo, "%B");
+  Serial.print("Day of Month: ");
+  Serial.println(&timeinfo, "%d");
+  Serial.print("Year: ");
+  Serial.println(&timeinfo, "%Y");
+  Serial.print("Hour: ");
+  Serial.println(&timeinfo, "%H");
+  Serial.print("Hour (12 hour format): ");
+  Serial.println(&timeinfo, "%I");
+  Serial.print("Minute: ");
+  Serial.println(&timeinfo, "%M");
+  Serial.print("Second: ");
+  Serial.println(&timeinfo, "%S");
+
+  Serial.println("Time variables");
+  char timeHour[3];
+  strftime(timeHour,3, "%H", &timeinfo);
+  Serial.println(timeHour);
+  char timeWeekDay[10];
+  strftime(timeWeekDay,10, "%A", &timeinfo);
+  Serial.println(timeWeekDay);
+  Serial.println();
 }
