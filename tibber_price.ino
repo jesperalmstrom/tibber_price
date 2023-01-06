@@ -18,8 +18,7 @@ char response[1000];
 
 WiFiClientSecure client;
 const String tibberApi = "https://api.tibber.com/v1-beta/gql";
-const String payload = "{\"query\": \"{viewer {homes {currentSubscription {priceInfo {current {total}}}}}}\" }";
-
+      
 void setup() {
   // Initialize serial and WiFi
   Serial.begin(115200);
@@ -51,6 +50,9 @@ void loop() {
   // add necessary headers
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Authorization",  b+token);
+  String hours = getHoursOfDay();
+  String payload = "{\"query\": \"{viewer {homes {consumption(resolution: HOURLY, last:" + hours + ") {pageInfo {totalCost totalConsumption}} production(resolution: HOURLY, last:" + hours + ") {pageInfo {totalProduction totalProfit}}currentSubscription {priceInfo {current {total}today {total}}}}}}\" }";
+
   int httpCode = http.POST(payload);
   if (httpCode == HTTP_CODE_OK) {
     String response = http.getString();
@@ -66,9 +68,9 @@ void loop() {
   // Disconnect from the server
   client.stop();
 
-  int oneHourInMilliSeconds = 60*60*1000;
+  int pauseInMilliSeconds = 10*60*1000;
   // Wait a while before making another request
-  delay(oneHourInMilliSeconds);
+  delay(pauseInMilliSeconds);
 }
 
 double parseResponse(String response) {
@@ -83,7 +85,7 @@ double parseResponse(String response) {
   }
 
   // Get the "total" value from the response
-  double total = doc["data"]["viewer"]["homes"][0]["currentSubscription"]["priceInfo"]["current"]["total"];
+  double total = doc["data"]["viewer"]["homes"][1]["currentSubscription"]["priceInfo"]["current"]["total"];
 
   // Print the total to the serial console
   Serial.println(total);
@@ -92,7 +94,7 @@ double parseResponse(String response) {
 
 void showCost(double dCost) {
   Serial.println("showCost");
-  display.setRotation(1);
+  display.setRotation(3);
   display.setFont(&FreeSerifBold24pt7b);
   if (display.epd2.WIDTH < 104) display.setFont(0);
   display.setTextColor(GxEPD_BLACK);
@@ -133,4 +135,15 @@ void showLocalTime(int16_t x, int16_t y) {
   display.setFont(&FreeSerifBold9pt7b);
   display.setCursor(x,y);
   display.print(timeNow);
+}
+
+char* getHoursOfDay() {
+  struct tm timeinfo;
+  if(!getLocalTime(&timeinfo)){
+    Serial.println("Failed to obtain time");
+    return "NA";
+  }
+  char hoursToday[2];
+  strftime(hoursToday,20, "%H", &timeinfo);
+  return hoursToday;
 }
