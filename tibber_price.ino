@@ -39,57 +39,18 @@ void setup() {
 
   // Init and get the time
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-
 }
 
-void loop() {
-  HTTPClient http;
-  String b = "Bearer ";
-
-  http.begin(client, tibberApi); 
-  // add necessary headers
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("Authorization",  b+token);
-  String hours = getHoursOfDay();
-  String payload = "{\"query\": \"{viewer {homes {consumption(resolution: HOURLY, last:" + hours + ") {pageInfo {totalCost totalConsumption}} production(resolution: HOURLY, last:" + hours + ") {pageInfo {totalProduction totalProfit}}currentSubscription {priceInfo {current {total}today {total}}}}}}\" }";
-
-  int httpCode = http.POST(payload);
-  if (httpCode == HTTP_CODE_OK) {
-    String response = http.getString();
-    //Serial.println(response);
-    double totalCostPerkwh = parseResponse(response);
-    showCost(totalCostPerkwh);
-  } else {
-    Serial.println("something went wrong");
-    Serial.println(httpCode);
-  }
-  http.end();
-
-  // Disconnect from the server
-  client.stop();
-
-  int pauseInMilliSeconds = 10*60*1000;
-  // Wait a while before making another request
-  delay(pauseInMilliSeconds);
-}
-
-double parseResponse(String response) {
-
+StaticJsonDocument<200> parseToJsonDoc(String response) {
   // Parse the JSON response
   StaticJsonDocument<200> doc;
   DeserializationError error = deserializeJson(doc, response);
   if (error) {
     Serial.println();
     Serial.println("Error parsing JSON response");
-    return 0;
+    //return null;
   }
-
-  // Get the "total" value from the response
-  double total = doc["data"]["viewer"]["homes"][1]["currentSubscription"]["priceInfo"]["current"]["total"];
-
-  // Print the total to the serial console
-  Serial.println(total);
-  return total;
+  return doc;
 }
 
 void showCost(double dCost) {
@@ -107,8 +68,7 @@ void showCost(double dCost) {
   uint16_t y = ((display.height() - tbh) / 2) - tby;
   display.setFullWindow();
   display.firstPage();
-  do
-  {
+  do {
     display.fillScreen(GxEPD_WHITE);
     display.setCursor(x, y);
     display.print(dispText);
@@ -122,6 +82,60 @@ void showCost(double dCost) {
   Serial.println("showCost done");
 }
 
+void showConsumtion(double dCost, double dConsumtion) {
+  Serial.println("showConsumtion");
+  display.setRotation(3);
+  display.setFont(&FreeSerifBold9pt7b);
+  if (display.epd2.WIDTH < 104) display.setFont(0);
+  display.setTextColor(GxEPD_BLACK);
+  int16_t tbx, tby; uint16_t tbw, tbh;
+  String sCost = " kr";
+  String dispText = dCost + sCost;
+  String dispTextConsumtion = dConsumtion + sCost;
+  display.getTextBounds(dispText, 0, 0, &tbx, &tby, &tbw, &tbh);
+  // center bounding box by transposition of origin:
+  uint16_t x = ((display.width() - tbw) / 4) - tbx;
+  uint16_t y = ((display.height() + tbh) / 2) + tby;
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setCursor(x, y);
+    display.print(dispText);
+    display.setCursor(x + tbw + 5, y);
+    display.print(dispTextConsumtion);
+  }
+  while (display.nextPage());
+  Serial.println("showConsumtion done");
+}
+
+void showProduction(double dTotalProduction, double dTotalProfit) {
+  Serial.println("showProduction");
+  display.setRotation(3);
+  display.setFont(&FreeSerifBold9pt7b);
+  if (display.epd2.WIDTH < 104) display.setFont(0);
+  display.setTextColor(GxEPD_BLACK);
+  int16_t tbx, tby; uint16_t tbw, tbh;
+  String sKWH = " kWh";
+  String dispText = dTotalProduction + sKWH;
+  String sCurrent = " kr";
+  String dispTextProfit = dTotalProfit + sCurrent;
+  display.getTextBounds(dispText, 0, 0, &tbx, &tby, &tbw, &tbh);
+  // center bounding box by transposition of origin:
+  uint16_t x = ((display.width() + tbw) / 2) + tbx;
+  uint16_t y = ((display.height() + tbh) / 2) + tby;
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setCursor(x, y);
+    display.print(dispText);
+    display.setCursor(x + tbw + 5, y);
+    display.print(dispTextProfit);
+  }
+  while (display.nextPage());
+  Serial.println("showProduction done");
+}
 void showLocalTime(int16_t x, int16_t y) {
   struct tm timeinfo;
   if(!getLocalTime(&timeinfo)){
@@ -144,6 +158,48 @@ char* getHoursOfDay() {
     return "NA";
   }
   char hoursToday[2];
-  strftime(hoursToday,20, "%H", &timeinfo);
+  strftime(hoursToday,2, "%H", &timeinfo);
+  Serial.print("Hour of day ");
+  Serial.println(hoursToday);
   return hoursToday;
+}
+
+void loop() {
+  HTTPClient http;
+  String b = "Bearer ";
+
+  http.begin(client, tibberApi); 
+  // add necessary headers
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Authorization",  b+token);
+  char* hours = getHoursOfDay();
+  Serial.println(hours);
+  String payload = "{\"query\": \"{viewer {homes {consumption(resolution: HOURLY, last:" + hours + ") {pageInfo {totalCost totalConsumption}} production(resolution: HOURLY, last:" + hours + ") {pageInfo {totalProduction totalProfit}}currentSubscription {priceInfo {current {total}}}}}}\" }";
+  Serial.println(payload);
+  int httpCode = http.POST(payload);
+  if (httpCode == HTTP_CODE_OK) {
+    String response = http.getString();
+    //Serial.println(response);
+    StaticJsonDocument<200> jsonDoc = parseToJsonDoc(response);
+    // Get the "total" value from the response
+    double totalCostPerkwh = jsonDoc["data"]["viewer"]["homes"][1]["currentSubscription"]["priceInfo"]["current"]["total"];
+    showCost(totalCostPerkwh);
+    double totalCost = jsonDoc["data"]["viewer"]["homes"][1]["consumption"]["priceInfo"]["totalCost"];
+    double totalConsumption = jsonDoc["data"]["viewer"]["homes"][1]["consumption"]["priceInfo"]["totalConsumption"];
+    showConsumtion(totalCost, totalConsumption);
+    double totalProduction = jsonDoc["data"]["viewer"]["homes"][1]["consumption"]["priceInfo"]["totalProduction"];
+    double totalProfit = jsonDoc["data"]["viewer"]["homes"][1]["production"]["priceInfo"]["totalProfit"];
+    showProduction(totalProduction, totalProfit);
+  } else {
+    Serial.println("something went wrong");
+    Serial.println(httpCode);
+  }
+  http.end();
+
+  // Disconnect from the server
+  client.stop();
+
+  int pauseInMilliSeconds = 10*60*1000;
+  // Wait a while before making another request
+  delay(pauseInMilliSeconds);
 }
