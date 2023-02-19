@@ -18,7 +18,7 @@ char response[1000];
 
 WiFiClientSecure client;
 const String tibberApi = "https://api.tibber.com/v1-beta/gql";
-      
+
 void setup() {
   // Initialize serial and WiFi
   Serial.begin(115200);
@@ -53,38 +53,50 @@ StaticJsonDocument<200> parseToJsonDoc(String response) {
   return doc;
 }
 
-void showCost(double dCost) {
-  Serial.println("showCost");
+void prepareDisplayAndShow(StaticJsonDocument jsonDoc) {
+  Serial.println("prepareDisplayAndShow");
   display.setRotation(3);
   display.setFont(&FreeSerifBold24pt7b);
   if (display.epd2.WIDTH < 104) display.setFont(0);
   display.setTextColor(GxEPD_BLACK);
-  int16_t tbx, tby; uint16_t tbw, tbh;
+
+  display.setFullWindow();
+  display.firstPage();
+  display.fillScreen(GxEPD_WHITE);
+  do {
+    double totalCostPerkwh = jsonDoc["data"]["viewer"]["homes"][1]["currentSubscription"]["priceInfo"]["current"]["total"];
+    showCost(totalCostPerkwh);
+    double totalCost = jsonDoc["data"]["viewer"]["homes"][1]["consumption"]["priceInfo"]["totalCost"];
+    double totalConsumption = jsonDoc["data"]["viewer"]["homes"][1]["consumption"]["priceInfo"]["totalConsumption"];
+    showConsumtion(totalCost, totalConsumption);
+    double totalProduction = jsonDoc["data"]["viewer"]["homes"][1]["consumption"]["priceInfo"]["totalProduction"];
+    double totalProfit = jsonDoc["data"]["viewer"]["homes"][1]["production"]["priceInfo"]["totalProfit"];
+    showProduction(totalProduction, totalProfit);
+  } while (display.nextPage());
+  Serial.println("prepareDisplayAndShow done");
+}
+
+void showCost(double dCost)
+{
+  int16_t tbx, tby;
+  uint16_t tbw, tbh;
   String sCost = " kr";
   String dispText = dCost + sCost;
   display.getTextBounds(dispText, 0, 0, &tbx, &tby, &tbw, &tbh);
   // center bounding box by transposition of origin:
   uint16_t x = ((display.width() - tbw) / 2) - tbx;
   uint16_t y = ((display.height() - tbh) / 2) - tby;
-  display.setFullWindow();
-  display.firstPage();
-  do {
-    display.fillScreen(GxEPD_WHITE);
-    display.setCursor(x, y);
-    display.print(dispText);
-    display.setFont(&FreeSerifBold9pt7b);
-    display.setCursor(x + tbw + 2, y);
-    display.print("/kWh");
-    
-    showLocalTime(x+2,20);
-  }
-  while (display.nextPage());
-  Serial.println("showCost done");
+  display.setCursor(x, y);
+  display.print(dispText);
+  display.setFont(&FreeSerifBold9pt7b);
+  display.setCursor(x + tbw + 2, y);
+  display.print("/kWh");
+
+  showLocalTime(x + 2, 20);
 }
 
 void showConsumtion(double dCost, double dConsumtion) {
   Serial.println("showConsumtion");
-  display.setRotation(3);
   display.setFont(&FreeSerifBold9pt7b);
   if (display.epd2.WIDTH < 104) display.setFont(0);
   display.setTextColor(GxEPD_BLACK);
@@ -96,8 +108,6 @@ void showConsumtion(double dCost, double dConsumtion) {
   // center bounding box by transposition of origin:
   uint16_t x = ((display.width() - tbw) / 4) - tbx;
   uint16_t y = ((display.height() + tbh) / 2) + tby;
-  display.setFullWindow();
-  display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
     display.setCursor(x, y);
@@ -111,7 +121,6 @@ void showConsumtion(double dCost, double dConsumtion) {
 
 void showProduction(double dTotalProduction, double dTotalProfit) {
   Serial.println("showProduction");
-  display.setRotation(3);
   display.setFont(&FreeSerifBold9pt7b);
   if (display.epd2.WIDTH < 104) display.setFont(0);
   display.setTextColor(GxEPD_BLACK);
@@ -124,8 +133,6 @@ void showProduction(double dTotalProduction, double dTotalProfit) {
   // center bounding box by transposition of origin:
   uint16_t x = ((display.width() + tbw) / 2) + tbx;
   uint16_t y = ((display.height() + tbh) / 2) + tby;
-  display.setFullWindow();
-  display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
     display.setCursor(x, y);
@@ -168,7 +175,7 @@ void loop() {
   HTTPClient http;
   String b = "Bearer ";
 
-  http.begin(client, tibberApi); 
+  http.begin(client, tibberApi);
   // add necessary headers
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Authorization",  b+token);
@@ -182,14 +189,7 @@ void loop() {
     Serial.println(response);
     StaticJsonDocument<200> jsonDoc = parseToJsonDoc(response);
     // Get the "total" value from the response
-    double totalCostPerkwh = jsonDoc["data"]["viewer"]["homes"][1]["currentSubscription"]["priceInfo"]["current"]["total"];
-    showCost(totalCostPerkwh);
-    double totalCost = jsonDoc["data"]["viewer"]["homes"][1]["consumption"]["priceInfo"]["totalCost"];
-    double totalConsumption = jsonDoc["data"]["viewer"]["homes"][1]["consumption"]["priceInfo"]["totalConsumption"];
-    showConsumtion(totalCost, totalConsumption);
-    double totalProduction = jsonDoc["data"]["viewer"]["homes"][1]["consumption"]["priceInfo"]["totalProduction"];
-    double totalProfit = jsonDoc["data"]["viewer"]["homes"][1]["production"]["priceInfo"]["totalProfit"];
-    showProduction(totalProduction, totalProfit);
+    prepareDisplayAndShow(jsonDoc);
   } else {
     Serial.println("something went wrong");
     Serial.println(httpCode);
