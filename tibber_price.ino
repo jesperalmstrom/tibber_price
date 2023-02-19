@@ -151,7 +151,7 @@ void showLocalTime(int16_t x, int16_t y) {
   display.print(timeNow);
 }
 
-char* getHoursOfDay() {
+String getHoursOfDay() {
   struct tm timeinfo;
   if(!getLocalTime(&timeinfo)){
     Serial.println("Failed to obtain time");
@@ -161,7 +161,7 @@ char* getHoursOfDay() {
   strftime(hoursToday,2, "%H", &timeinfo);
   Serial.print("Hour of day ");
   Serial.println(hoursToday);
-  return hoursToday;
+  return String(hoursToday);
 }
 
 void loop() {
@@ -172,14 +172,14 @@ void loop() {
   // add necessary headers
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Authorization",  b+token);
-  char* hours = getHoursOfDay();
+  String hours = getHoursOfDay();
   Serial.println(hours);
   String payload = "{\"query\": \"{viewer {homes {consumption(resolution: HOURLY, last:" + hours + ") {pageInfo {totalCost totalConsumption}} production(resolution: HOURLY, last:" + hours + ") {pageInfo {totalProduction totalProfit}}currentSubscription {priceInfo {current {total}}}}}}\" }";
   Serial.println(payload);
   int httpCode = http.POST(payload);
   if (httpCode == HTTP_CODE_OK) {
     String response = http.getString();
-    //Serial.println(response);
+    Serial.println(response);
     StaticJsonDocument<200> jsonDoc = parseToJsonDoc(response);
     // Get the "total" value from the response
     double totalCostPerkwh = jsonDoc["data"]["viewer"]["homes"][1]["currentSubscription"]["priceInfo"]["current"]["total"];
