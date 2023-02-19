@@ -24,9 +24,9 @@ jobs:
             # This is formatted as a YAML list, which makes it possible to have multiple sketch paths if needed.
             - ./
           libraries: |
-            - Adafruit-GFX-Library
-            - ArduinoJson
-            - GxEPD2
-            - Adafruit_BusIO
+            - name: Adafruit-GFX-Library
+            - name: ArduinoJson
+            - name: GxEPD2
+            - name: Adafruit_BusIO
 
       
