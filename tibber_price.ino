@@ -53,7 +53,8 @@ StaticJsonDocument<200> parseToJsonDoc(String response) {
   return doc;
 }
 
-void prepareDisplayAndShow(StaticJsonDocument jsonDoc) {
+void prepareDisplayAndShow(StaticJsonDocument<200> jsonDoc)
+{
   Serial.println("prepareDisplayAndShow");
   display.setRotation(3);
   display.setFont(&FreeSerifBold24pt7b);
